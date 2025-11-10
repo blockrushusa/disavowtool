@@ -5,6 +5,8 @@ import { useCallback, useMemo, useState, type ChangeEvent } from "react";
 type ParseResult = {
   cleaned: string[];
   total: number;
+  skippedPlain: number;
+  duplicatesRemoved: number;
 };
 
 const DEFAULT_COMMENT = "# Disavow list";
@@ -71,28 +73,57 @@ const parseDomains = (
     .filter(Boolean);
 
   const total = tokens.length;
-  const processed = tokens
+  let skippedPlain = 0;
+
+  const normalized = tokens
     .map((token) => {
-      if (skipNonUrl && !looksLikeUrl(token)) return null;
+      if (skipNonUrl && !looksLikeUrl(token)) {
+        skippedPlain++;
+        return null;
+      }
       return toDisavowDomain(token);
     })
     .filter((item): item is string => !!item);
 
-  const cleaned = dedupe ? Array.from(new Set(processed)) : processed;
+  const deduped = dedupe ? Array.from(new Set(normalized)) : normalized;
+  const duplicatesRemoved = dedupe ? normalized.length - deduped.length : 0;
 
-  return { cleaned, total };
+  return { cleaned: deduped, total, skippedPlain, duplicatesRemoved };
+};
+
+type TrimSummary = {
+  total: number;
+  filtered: number;
+  skippedPlain: number;
+  duplicatesRemoved: number;
+  greenRemoved: number;
 };
 
 type ProcessOptions = {
-  customStatus?: (total: number, cleaned: number) => string;
+  customStatus?: (summary: TrimSummary) => string;
   greenOverride?: Set<string>;
 };
+
+const summarizeTrims = ({
+  total,
+  filtered,
+  skippedPlain,
+  duplicatesRemoved,
+  greenRemoved,
+}: TrimSummary) =>
+  `Output ${filtered}/${total} | plain ${skippedPlain} | dupes ${duplicatesRemoved} | green ${greenRemoved}`;
 
 export default function Home() {
   const [comment, setComment] = useState(DEFAULT_COMMENT);
   const [rawInput, setRawInput] = useState("");
   const [domains, setDomains] = useState<string[]>([]);
-  const [stats, setStats] = useState({ total: 0, output: 0, greenRemoved: 0 });
+  const [stats, setStats] = useState({
+    total: 0,
+    output: 0,
+    greenRemoved: 0,
+    skippedPlain: 0,
+    duplicatesRemoved: 0,
+  });
   const [fileName, setFileName] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [dedupe, setDedupe] = useState(true);
@@ -114,26 +145,42 @@ export default function Home() {
     ) => {
       if (!source.trim()) {
         setDomains([]);
-        setStats({ total: 0, output: 0, greenRemoved: 0 });
+        setStats({
+          total: 0,
+          output: 0,
+          greenRemoved: 0,
+          skippedPlain: 0,
+          duplicatesRemoved: 0,
+        });
         setStatus("Nothing to format.");
         return;
       }
 
-      const { cleaned, total } = parseDomains(source, dedupeFlag, skipFlag);
+      const { cleaned, total, skippedPlain, duplicatesRemoved } = parseDomains(
+        source,
+        dedupeFlag,
+        skipFlag,
+      );
       const filterSet = options?.greenOverride ?? greenlistSet;
       const filtered = cleaned.filter((entry) => !filterSet.has(entry));
+      const greenRemoved = cleaned.length - filtered.length;
+      const summary: TrimSummary = {
+        total,
+        filtered: filtered.length,
+        skippedPlain,
+        duplicatesRemoved,
+        greenRemoved,
+      };
       setDomains(filtered);
       setStats({
         total,
         output: filtered.length,
-        greenRemoved: cleaned.length - filtered.length,
+        greenRemoved,
+        skippedPlain,
+        duplicatesRemoved,
       });
       setStatus(
-        options?.customStatus
-          ? options.customStatus(total, filtered.length)
-          : total === 0
-            ? "Nothing to format."
-            : `Trimmed ${total} entries into ${filtered.length}.`,
+        options?.customStatus ? options.customStatus(summary) : summarizeTrims(summary),
       );
     },
     [greenlistSet],
@@ -159,10 +206,10 @@ export default function Home() {
         next,
         skipNonUrl,
         {
-          customStatus: (total, filtered) =>
+          customStatus: ({ total, filtered, duplicatesRemoved }) =>
             next
-              ? `Removed duplicates: ${filtered}/${total} domains left.`
-              : `Showing all ${filtered} entries.`,
+              ? `Removed ${duplicatesRemoved} duplicates → ${filtered}/${total} live.`
+              : `Duplicates allowed → ${filtered}/${total} entries.`,
         },
       );
     }
@@ -177,10 +224,10 @@ export default function Home() {
         dedupe,
         next,
         {
-          customStatus: (total, filtered) =>
+          customStatus: ({ total, filtered, skippedPlain }) =>
             next
-              ? `Skipped plain text: ${filtered}/${total} entries kept.`
-              : `Including all ${filtered} entries.`,
+              ? `Skipped ${skippedPlain} plain lines → ${filtered}/${total} ready.`
+              : `Plain text allowed → ${filtered}/${total} entries.`,
         },
       );
     }
@@ -226,9 +273,9 @@ export default function Home() {
 
       if (lastProcessed !== null) {
         runProcessing(lastProcessed, dedupe, skipNonUrl, {
-          customStatus: (total, filtered) =>
+          customStatus: ({ total, filtered, greenRemoved }) =>
             entries.length
-              ? `Greenlist applied: ${filtered}/${total} domains kept.`
+              ? `Greenlist applied: removed ${greenRemoved} → ${filtered}/${total} live.`
               : `Greenlist cleared: ${filtered}/${total} domains available.`,
           greenOverride: overrideSet,
         });
@@ -547,7 +594,13 @@ export default function Home() {
                 onClick={() => {
                   setRawInput("");
                   setDomains([]);
-                  setStats({ total: 0, output: 0, greenRemoved: 0 });
+                  setStats({
+                    total: 0,
+                    output: 0,
+                    greenRemoved: 0,
+                    skippedPlain: 0,
+                    duplicatesRemoved: 0,
+                  });
                   setFileName(null);
                   setComment(DEFAULT_COMMENT);
                   setDedupe(true);
@@ -599,6 +652,32 @@ export default function Home() {
                 </p>
                 <p className="text-2xl font-semibold text-slate-100">
                   {stats.output}
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-xs">
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">
+                  Plain skip
+                </p>
+                <p className="text-lg font-semibold text-slate-100">
+                  {stats.skippedPlain}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">
+                  Duplicates
+                </p>
+                <p className="text-lg font-semibold text-slate-100">
+                  {stats.duplicatesRemoved}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
+                <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">
+                  Greenlist
+                </p>
+                <p className="text-lg font-semibold text-emerald-400">
+                  {stats.greenRemoved}
                 </p>
               </div>
             </div>

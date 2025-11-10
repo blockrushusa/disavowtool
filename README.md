@@ -1,29 +1,29 @@
-# Create T3 App
+# Disavow Tool
 
-This is a [T3 Stack](https://create.t3.gg/) project bootstrapped with `create-t3-app`.
+A lightweight Next.js + T3 Stack UI for turning messy backlink dumps into Google-ready `domain:` directives. Paste URLs, upload files, apply dedupe/UTF-8/greenlist filters, then copy or download the formatted list.
 
-## What's next? How do I make an app with this?
+## Available scripts
 
-We try to keep this project as simple as possible, so you can start with just the scaffolding we set up for you, and add additional things later when they become necessary.
+- `npm run dev` – start the local dev server with Turbopack.
+- `npm run build` – create a production build (also powers static export).
+- `npm run export` – identical to `npm run build`, but named for clarity when generating static assets.
+- `npm run preview` – run the production server locally.
+- `npm run typecheck` – ensure TypeScript types are sound.
 
-If you are not familiar with the different technologies used in this project, please refer to the respective docs. If you still are in the wind, please join our [Discord](https://t3.gg/discord) and ask for help.
+## Exporting for GitHub Pages (or any static host)
 
-- [Next.js](https://nextjs.org)
-- [NextAuth.js](https://next-auth.js.org)
-- [Prisma](https://prisma.io)
-- [Drizzle](https://orm.drizzle.team)
-- [Tailwind CSS](https://tailwindcss.com)
-- [tRPC](https://trpc.io)
+This project is configured with `output: "export"` in `next.config.js`, so a single command produces a static site under the `out/` directory.
 
-## Learn More
+```bash
+npm install
+npm run export
+```
 
-To learn more about the [T3 Stack](https://create.t3.gg/), take a look at the following resources:
+The `out/` folder now contains HTML/CSS/JS you can upload directly to GitHub Pages (via `gh-pages`, GitHub Actions, or manual upload). If you serve the site from a sub-path (e.g., `https://username.github.io/repo-name`), remember to set the `homepage` in your deployment tooling or adjust `assetPrefix`/`basePath` if needed for your repository slug.
 
-- [Documentation](https://create.t3.gg/)
-- [Learn the T3 Stack](https://create.t3.gg/en/faq#what-learning-resources-are-currently-available) — Check out these awesome tutorials
+## Features recap
 
-You can check out the [create-t3-app GitHub repository](https://github.com/t3-oss/create-t3-app) — your feedback and contributions are welcome!
-
-## How do I deploy this?
-
-Follow our deployment guides for [Vercel](https://create.t3.gg/en/deployment/vercel), [Netlify](https://create.t3.gg/en/deployment/netlify) and [Docker](https://create.t3.gg/en/deployment/docker) for more information.
+- Paste text or upload `.txt/.csv/.tsv` source lists.
+- Toggle deduplication, skip non-URL lines, require UTF-8, and add a custom comment line.
+- Maintain a greenlist of safe domains (upload file or paste inline) so they never appear in the disavow output.
+- See a live breakdown of how many entries were skipped (plain text, duplicates, greenlist) along with export-ready previews, copy, and download actions.
