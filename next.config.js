@@ -7,4 +7,5 @@ import "./src/env.js";
 /** @type {import("next").NextConfig} */
 const config = {};
 
+config.output = 'export';
 export default config;
