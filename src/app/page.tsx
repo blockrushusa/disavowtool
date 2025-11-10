@@ -11,6 +11,13 @@ type ParseResult = {
 
 const DEFAULT_COMMENT = "# Disavow list";
 
+const slugify = (input: string) =>
+  input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 const normalizeGreenEntries = (text: string): string[] =>
   Array.from(
     new Set(
@@ -133,6 +140,9 @@ export default function Home() {
   const [greenlistFileName, setGreenlistFileName] = useState<string | null>(null);
   const [greenlistInput, setGreenlistInput] = useState("");
   const [isGreenlistOpen, setIsGreenlistOpen] = useState(false);
+  const [projectName, setProjectName] = useState("");
+  const [customFileName, setCustomFileName] = useState("");
+  const [showGreenlistModal, setShowGreenlistModal] = useState(false);
   const [lastProcessed, setLastProcessed] = useState<string | null>(null);
   const greenlistSet = useMemo(() => new Set(greenlist), [greenlist]);
 
@@ -338,18 +348,44 @@ export default function Home() {
   const actionDisabled = !hasOutput || (utf8Check && !utf8Safe);
   const outputLabel = dedupe ? "Unique" : "Output";
   const canApplyGreenlistPaste = greenlistInput.trim().length > 0;
+  const greenlistActive = greenlist.length > 0;
+  const greenlistStatusClass = greenlistActive ? "text-emerald-400" : "text-amber-400";
+  const greenlistHitClass =
+    stats.greenRemoved > 0 ? "text-emerald-400" : "text-amber-400";
+  const resolvedFileName = useMemo(() => {
+    const base =
+      customFileName.trim() ||
+      (() => {
+        const now = new Date();
+        const dd = now.getDate().toString().padStart(2, "0");
+        const mm = (now.getMonth() + 1).toString().padStart(2, "0");
+        const yyyy = now.getFullYear().toString();
+        const stamp = `${dd}${yyyy}${mm}`;
+        const slug = slugify(projectName);
+        return `disavow-${stamp}${slug ? `-${slug}` : ""}`;
+      })();
+    return base.endsWith(".txt") ? base : `${base}.txt`;
+  }, [customFileName, projectName]);
 
-  const handleDownload = useCallback(() => {
+  const performDownload = useCallback(() => {
     if (!preview.trim()) return;
     const blob = new Blob([preview], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, "");
-    link.download = `disavow-${stamp}.txt`;
+    link.download = resolvedFileName;
     link.click();
     URL.revokeObjectURL(url);
-  }, [preview]);
+  }, [preview, resolvedFileName]);
+
+  const handleDownload = useCallback(() => {
+    if (!preview.trim()) return;
+    if (!greenlist.length) {
+      setShowGreenlistModal(true);
+      return;
+    }
+    performDownload();
+  }, [preview, greenlist.length, performDownload]);
 
   const handleCopy = useCallback(async () => {
     if (!preview.trim() || !navigator?.clipboard) return;
@@ -497,8 +533,8 @@ export default function Home() {
                       <p className="text-xs text-slate-400">
                         Strip safe domains before export.
                       </p>
-                      <p className="text-xs text-emerald-400">
-                        {greenlist.length > 0
+                      <p className={`text-xs ${greenlistStatusClass}`}>
+                        {greenlistActive
                           ? `Greenlist enabled for ${greenlist.length} ${
                               greenlist.length === 1 ? "domain" : "domains"
                             }.`
@@ -610,6 +646,8 @@ export default function Home() {
                   setGreenlistFileName(null);
                   setGreenlistInput("");
                   setIsGreenlistOpen(false);
+                  setProjectName("");
+                  setCustomFileName("");
                   setLastProcessed(null);
                   setStatus("");
                 }}
@@ -631,7 +669,7 @@ export default function Home() {
               <p className="text-xs text-slate-500">
                 {dedupe ? "Unique only" : "Duplicates kept"}
               </p>
-              <p className="text-xs text-emerald-400">
+              <p className={`text-xs ${greenlistHitClass}`}>
                 {stats.greenRemoved > 0
                   ? `Filtered ${stats.greenRemoved} ${
                       stats.greenRemoved === 1 ? "domain" : "domains"
@@ -655,6 +693,41 @@ export default function Home() {
                 </p>
               </div>
             </div>
+            <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-4">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                Settings
+              </p>
+              <div className="mt-3 space-y-3 text-sm">
+                <div>
+                  <label className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    Project name
+                  </label>
+                  <input
+                    type="text"
+                    value={projectName}
+                    onChange={(event) => setProjectName(event.target.value)}
+                    placeholder="Project slug"
+                    className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs uppercase tracking-[0.3em] text-slate-500">
+                    Export filename
+                  </label>
+                  <input
+                    type="text"
+                    value={customFileName}
+                    onChange={(event) => setCustomFileName(event.target.value)}
+                    placeholder="disavow-DDYYYYMM-ProjectName"
+                    className="mt-1 w-full rounded-2xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-100 outline-none transition focus:border-cyan-400 focus:ring-2 focus:ring-cyan-500/30"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    Current export name:{" "}
+                    <span className="text-slate-200">{resolvedFileName}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
             <div className="grid grid-cols-3 gap-3 text-xs">
               <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-3">
                 <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">
@@ -676,7 +749,7 @@ export default function Home() {
                 <p className="text-[0.65rem] uppercase tracking-[0.3em] text-slate-500">
                   Greenlist
                 </p>
-                <p className="text-lg font-semibold text-emerald-400">
+                <p className={`text-lg font-semibold ${greenlistHitClass}`}>
                   {stats.greenRemoved}
                 </p>
               </div>
@@ -730,6 +803,43 @@ export default function Home() {
           </div>
         </section>
       </div>
+      {showGreenlistModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 px-4 py-8">
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 text-slate-100 shadow-2xl"
+          >
+            <p className="text-xs uppercase tracking-[0.4em] text-amber-400">
+              Heads up
+            </p>
+            <h2 className="mt-2 text-2xl font-semibold">No greenlist set</h2>
+            <p className="mt-3 text-sm text-slate-400">
+              You are about to export without a greenlist. Load or paste trusted
+              domains first to avoid disavowing safe sites, or continue anyway.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowGreenlistModal(false);
+                  performDownload();
+                }}
+                className="flex-1 rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold uppercase tracking-wide text-slate-950 transition hover:bg-emerald-400"
+              >
+                Download anyway
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowGreenlistModal(false)}
+                className="flex-1 rounded-2xl border border-slate-700 px-4 py-3 text-sm font-semibold tracking-wide text-slate-200 transition hover:border-slate-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
