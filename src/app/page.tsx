@@ -296,24 +296,38 @@ export default function Home() {
 
   const handleGreenlistUpload = useCallback(
     async (event: ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+      const inputEl = event.currentTarget;
+      const file = inputEl.files?.[0];
       if (!file) return;
 
-      const decode = async () =>
-        utf8Check
-          ? new TextDecoder("utf-8", { fatal: true }).decode(
-              await file.arrayBuffer(),
-            )
-          : await file.text();
+      const decode = async () => {
+        if (!utf8Check || typeof TextDecoder === "undefined") {
+          return await file.text();
+        }
+        try {
+          return new TextDecoder("utf-8", { fatal: true }).decode(
+            await file.arrayBuffer(),
+          );
+        } catch {
+          throw new Error("utf8DecodeFailed");
+        }
+      };
 
       try {
         const text = await decode();
         const normalized = normalizeGreenEntries(text);
         applyGreenlistEntries(normalized, file.name);
-      } catch {
-        setStatus(`Failed to read ${file.name}`);
+        if (!normalized.length) {
+          setStatus(`No valid domains found in ${file.name}.`);
+        }
+      } catch (error) {
+        const reason =
+          error instanceof Error && error.message === "utf8DecodeFailed"
+            ? "UTF-8 validation failed"
+            : "Failed to read file";
+        setStatus(`${reason}: ${file.name}`);
       } finally {
-        event.target.value = "";
+        inputEl.value = "";
       }
     },
     [utf8Check, applyGreenlistEntries],
