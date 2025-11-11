@@ -5,7 +5,10 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  output: 'export',
+  basePath: '/disavowtool',
+  assetPrefix: '/disavowtool/',
+};
 
-config.output = 'export';
 export default config;
