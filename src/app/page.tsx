@@ -65,6 +65,10 @@ const toDisavowDomain = (value: string): string | null => {
   const normalized = hostname.replace(/^www\./i, "").toLowerCase();
   if (!normalized) return null;
 
+  if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(normalized)) {
+    return null;
+  }
+
   return `domain:${normalized}`;
 };
 
